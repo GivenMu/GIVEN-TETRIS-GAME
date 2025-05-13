@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Given Tetris-Game</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: linear-gradient(to bottom, #1a1a2e, #16213e);
+      color: #fff;
+      font-family: 'Arial', sans-serif;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      margin: 20px;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    }
+
+    .game-container {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    #game {
+      display: grid;
+      grid-template-columns: repeat(10, 30px);
+      grid-template-rows: repeat(20, 30px);
+      gap: 1px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 5px;
+      padding: 5px;
+    }
+
+    .cell {
+      width: 30px;
+      height: 30px;
+      background: rgba(51, 51, 51, 0.5);
+      border-radius: 3px;
+      transition: background-color 0.2s;
+    }
+
+    .falling {
+      background: #4CAF50;
+      box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+    }
+
+    .settled {
+      background: #2196F3;
+      box-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
+    }
+
+    .game-info {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      border-radius: 5px;
+      min-width: 200px;
+    }
+
+    .score {
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    .controls {
+      margin-top: 20px;
+      font-size: 14px;
+    }
+
+    .game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.8);
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+      display: none;
+    }
+
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    button:hover {
+      background: #45a049;
+    }
+
+    .next-piece {
+      margin-top: 20px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Given Tertis - Game</h1>
+  <div class="game-container">
+    <div id="game"></div>
+    <div class="game-info">
+      <div class="score">Score: <span id="score">0</span></div>
+      <div class="controls">
+        <p>Controls:</p>
+        ← → : Move left/right<br>
+        ↓ : Move down<br>
+        ↑ : Rotate<br>
+        Space : Drop instantly
+      </div>
+    </div>
+  </div>
+  <div class="game-over" id="gameOver">
+    <h2>Game Over!</h2>
+    <p>Final Score: <span id="finalScore">0</span></p>
+    <button onclick="resetGame()">Play Again</button>
+  </div>
+
+  <script>
+    const SHAPES = {
+      I: [
+        [1],
+        [1],
+        [1],
+        [1]
+      ],
+      L: [
+        [1, 0],
+        [1, 0],
+        [1, 1]
+      ],
+      T: [
+        [1, 1, 1],
+        [0, 1, 0]
+      ],
+      O: [
+        [1, 1],
+        [1, 1]
+      ],
+      Z: [
+        [1, 1, 0],
+        [0, 1, 1]
+      ]
+    };
+
+    const COLORS = {
+      I: '#00f0f0',
+      L: '#f0a000',
+      T: '#a000f0',
+      O: '#f0f000',
+      Z: '#f00000'
+    };
+
+    const game = document.getElementById("game");
+    const scoreElement = document.getElementById("score");
+    const finalScoreElement = document.getElementById("finalScore");
+    const gameOverElement = document.getElementById("gameOver");
+    const cols = 10;
+    const rows = 20;
+    const grid = [];
+    let currentShape;
+    let currentShapeType;
+    let currentRow = 0;
+    let currentCol = 4;
+    let score = 0;
+    let gameSpeed = 500;
+    let gameInterval;
+    let isGameOver = false;
+
+    function getRandomShape() {
+      const shapes = Object.keys(SHAPES);
+      const randomShapeType = shapes[Math.floor(Math.random() * shapes.length)];
+      return {
+        shape: SHAPES[randomShapeType],
+        type: randomShapeType
+      };
+    }
+
+    function createGrid() {
+      game.innerHTML = '';
+      for (let i = 0; i < rows * cols; i++) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        game.appendChild(cell);
+        grid[i] = cell;
+      }
+    }
+
+    function getIndex(row, col) {
+      return row * cols + col;
+    }
+
+    function rotateShape(shape) {
+      const N = shape.length;
+      const M = shape[0].length;
+      const rotated = Array(M).fill().map(() => Array(N).fill(0));
+      
+      for (let i = 0; i < N; i++) {
+        for (let j = 0; j < M; j++) {
+          rotated[j][N-1-i] = shape[i][j];
+        }
+      }
+      
+      return rotated;
+    }
+
+    function canMove(shape, newRow, newCol) {
+      for (let i = 0; i < shape.length; i++) {
+        for (let j = 0; j < shape[i].length; j++) {
+          if (shape[i][j]) {
+            const nextRow = newRow + i;
+            const nextCol = newCol + j;
+            
+            if (nextRow >= rows || nextCol < 0 || nextCol >= cols) return false;
+            if (nextRow >= 0 && grid[getIndex(nextRow, nextCol)].classList.contains("settled")) return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function drawShape() {
+      clearShape();
+      if (!currentShape) {
+        const newShape = getRandomShape();
+        currentShape = newShape.shape;
+        currentShapeType = newShape.type;
+        currentRow = 0;
+        currentCol = Math.floor((cols - currentShape[0].length) / 2);
+        
+        if (!canMove(currentShape, currentRow, currentCol)) {
+          isGameOver = true;
+          clearInterval(gameInterval);
+          finalScoreElement.textContent = score;
+          gameOverElement.style.display = "block";
+          return;
+        }
+      }
+
+      for (let i = 0; i < currentShape.length; i++) {
+        for (let j = 0; j < currentShape[i].length; j++) {
+          if (currentShape[i][j] && currentRow + i >= 0) {
+            const cell = grid[getIndex(currentRow + i, currentCol + j)];
+            cell.classList.add("falling");
+            cell.style.backgroundColor = COLORS[currentShapeType];
+          }
+        }
+      }
+    }
+
+    function clearShape() {
+      grid.forEach(cell => {
+        cell.classList.remove("falling");
+        if (!cell.classList.contains("settled")) {
+          cell.style.backgroundColor = '';
+        }
+      });
+    }
+
+    function settleShape() {
+      for (let i = 0; i < currentShape.length; i++) {
+        for (let j = 0; j < currentShape[i].length; j++) {
+          if (currentShape[i][j] && currentRow + i >= 0) {
+            const cell = grid[getIndex(currentRow + i, currentCol + j)];
+            cell.classList.add("settled");
+            cell.style.backgroundColor = COLORS[currentShapeType];
+          }
+        }
+      }
+      currentShape = null;
+      checkRows();
+    }
+
+    function checkRows() {
+      for (let row = rows - 1; row >= 0; row--) {
+        const isRowFull = Array.from({ length: cols }).every((_, col) =>
+          grid[getIndex(row, col)].classList.contains("settled")
+        );
+        if (isRowFull) {
+          clearRow(row);
+          moveRowsDown(row);
+          score += 100;
+          scoreElement.textContent = score;
+          gameSpeed = Math.max(100, 500 - Math.floor(score / 1000) * 50);
+          resetInterval();
+          row++; // Check the same row again after moving everything down
+        }
+      }
+    }
+
+    function clearRow(row) {
+      for (let col = 0; col < cols; col++) {
+        const cell = grid[getIndex(row, col)];
+        cell.classList.remove("settled");
+        cell.style.backgroundColor = '';
+      }
+    }
+
+    function moveRowsDown(clearedRow) {
+      for (let row = clearedRow - 1; row >= 0; row--) {
+        for (let col = 0; col < cols; col++) {
+          const currentCell = grid[getIndex(row, col)];
+          const cellBelow = grid[getIndex(row + 1, col)];
+          
+          if (currentCell.classList.contains("settled")) {
+            cellBelow.classList.add("settled");
+            cellBelow.style.backgroundColor = currentCell.style.backgroundColor;
+            currentCell.classList.remove("settled");
+            currentCell.style.backgroundColor = '';
+          }
+        }
+      }
+    }
+
+    function moveDown() {
+      if (!isGameOver) {
+        if (currentShape && canMove(currentShape, currentRow + 1, currentCol)) {
+          currentRow++;
+          drawShape();
+        } else {
+          settleShape();
+          drawShape();
+        }
+      }
+    }
+
+    function rotate() {
+      if (currentShape) {
+        const rotated = rotateShape(currentShape);
+        if (canMove(rotated, currentRow, currentCol)) {
+          currentShape = rotated;
+          drawShape();
+        }
+      }
+    }
+
+    function moveLeft() {
+      if (!isGameOver && currentShape && canMove(currentShape, currentRow, currentCol - 1)) {
+        currentCol--;
+        drawShape();
+      }
+    }
+
+    function moveRight() {
+      if (!isGameOver && currentShape && canMove(currentShape, currentRow, currentCol + 1)) {
+        currentCol++;
+        drawShape();
+      }
+    }
+
+    function dropInstantly() {
+      while (currentShape && canMove(currentShape, currentRow + 1, currentCol)) {
+        currentRow++;
+      }
+      drawShape();
+    }
+
+    function resetGame() {
+      isGameOver = false;
+      score = 0;
+      gameSpeed = 500;
+      scoreElement.textContent = score;
+      gameOverElement.style.display = "none";
+      createGrid();
+      currentShape = null;
+      drawShape();
+      resetInterval();
+    }
+
+    function resetInterval() {
+      clearInterval(gameInterval);
+      gameInterval = setInterval(moveDown, gameSpeed);
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") moveLeft();
+      if (e.key === "ArrowRight") moveRight();
+      if (e.key === "ArrowDown") moveDown();
+      if (e.key === "ArrowUp") rotate();
+      if (e.key === " ") dropInstantly();
+    });
+
+    createGrid();
+    drawShape();
+    gameInterval = setInterval(moveDown, gameSpeed);
+  </script>
+</body>
+</html>
