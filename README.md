@@ -22,9 +22,3 @@ The Tetris game allows users to play the classic puzzle game in their browser. I
    - **Right Arrow**: Move the block right
    - **Down Arrow**: Move the block down faster
 3. **Objective**: Complete horizontal lines to clear them and score points. The game ends when the stack of blocks reaches the top of the screen.
-
-## How to Run the Game
-
-1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/YOUR-USERNAME/GIVEN-TETRIS-GAME.git
